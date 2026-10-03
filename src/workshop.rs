@@ -1,4 +1,4 @@
-use std::{borrow::Cow, fmt, path::Path};
+use std::{borrow::Cow, env, fmt, path::Path, sync::LazyLock};
 
 use color_eyre::eyre::{self, bail, ContextCompat};
 use fs_err::PathExt;
@@ -109,10 +109,42 @@ pub fn is_valid_preview_type(path: impl AsRef<Path>) -> eyre::Result<()> {
     }
 }
 
+/// `SteamAPI_Init` injects Steam's game-launch environment into our process — including
+/// `LC_ALL=C`, which breaks UTF-8 handling in programs spawned afterwards (e.g.
+/// `$EDITOR` launched for a changelog prompt reading a UTF-8 vimrc).
+/// Captured before the first Steam init and restored afterwards.
+static LOCALE_ENV: LazyLock<Vec<(String, String)>> = LazyLock::new(|| {
+    env::vars()
+        .filter(|(key, _)| key == "LANG" || key.starts_with("LC_"))
+        .collect()
+});
+
+fn restore_locale_env(saved: &[(String, String)]) {
+    for (key, value) in saved {
+        if env::var(key).as_deref() != Ok(value.as_str()) {
+            env::set_var(key, value);
+        }
+    }
+
+    let mut injected_keys = env::vars()
+        .filter(|(key, _)| {
+            (key == "LANG" || key.starts_with("LC_"))
+                && !saved.iter().any(|(saved_key, _)| saved_key == key)
+        })
+        .map(|(key, _)| key)
+        .collect_vec();
+    for key in injected_keys.drain(..) {
+        env::remove_var(&key);
+    }
+}
+
 pub fn steamworks_client_init(
     app_id: impl Into<steamworks::AppId>,
 ) -> eyre::Result<(SteamworksClient, SteamworksSingleClient)> {
-    Ok(steamworks::Client::init_app(app_id).map_err(|err| {
+    // Capture the locale env before SteamAPI_Init pollutes it
+    LazyLock::force(&LOCALE_ENV);
+
+    let client_and_single = steamworks::Client::init_app(app_id).map_err(|err| {
         eyre::eyre!(
             "{}",
             match err {
@@ -121,7 +153,11 @@ pub fn steamworks_client_init(
                 err => format!("{err}"),
             }
         )
-    })?)
+    })?;
+
+    restore_locale_env(&LOCALE_ENV);
+
+    Ok(client_and_single)
 }
 
 /// Both `from` and `to` are paths to directory.
