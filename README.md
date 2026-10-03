@@ -46,6 +46,10 @@ workshop update --content 'path/to/workshop/content/folder'
 
 To see all available options, use the `--help` flag.
 
+## DayZ
+
+When uploading to DayZ (App ID `221100`), a `meta.cpp` is automatically created or updated in the content folder on every upload. Its `publishedid` is set to the workshop item id (from `workshop.toml`, so it is no longer `0` after the first upload) and its `timestamp` is refreshed in the format DayZ's own publisher uses (.NET `DateTime.ToBinary()`). An existing `meta.cpp` is updated in-place, so any extra fields in it are preserved.
+
 ## Settings
 
 The config file is located at `$XDG_CONFIG_HOME/io.github.nozwock.steam-workshop-uploader/config.toml`. Or, you can place `config.toml` next to the executable, which will take priority.

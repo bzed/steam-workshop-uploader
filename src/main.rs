@@ -19,7 +19,10 @@ use itertools::Itertools;
 use tracing::{error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt, EnvFilter};
 use tracing_utils::{format::SourceFormatter, writer::RotatingFileWriter};
-use workshop::{check_tags_are_predefined, is_valid_preview_type, open_workshop_page, Tag};
+use workshop::{
+    check_tags_are_predefined, is_valid_preview_type, open_workshop_page, write_dayz_meta_cpp, Tag,
+    DAYZ_APP_ID,
+};
 
 #[allow(unused)]
 macro_rules! exit_on_err {
@@ -259,6 +262,12 @@ fn run() -> eyre::Result<()> {
                 "id=".italic(),
                 file_id.0.italic()
             );
+
+            if app_id.0 == DAYZ_APP_ID {
+                eprintln!("{}", "[-] Updating meta.cpp...".cyan());
+                write_dayz_meta_cpp(&content_path, file_id.0)?;
+            }
+
             eprintln!("{}", "[-] Preparing workshop content...".cyan());
 
             let prepared_content_dir = tempfile::TempDir::new()?;
@@ -414,6 +423,10 @@ fn run() -> eyre::Result<()> {
 
             let prepared_content_dir;
             if !command.no_content_update {
+                if workshop_item_cfg.app_id == DAYZ_APP_ID {
+                    eprintln!("{}", "[-] Updating meta.cpp...".cyan());
+                    write_dayz_meta_cpp(&content_path, workshop_item_cfg.item_id)?;
+                }
                 prepared_content_dir = tempfile::TempDir::new()?;
                 workshop::copy_filtered_content(
                     &content_path,
